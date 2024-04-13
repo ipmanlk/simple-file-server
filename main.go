@@ -188,6 +188,8 @@ func downloadFileHandler(w http.ResponseWriter, r *http.Request, db *sql.DB) {
 
 	// Set Content-Type header
 	w.Header().Set("Content-Type", "application/octet-stream")
+	// Set Content-Disposition header to force browser to download with proper filename
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%s", filename))
 
 	// Stream file content to response
 	_, err = io.Copy(w, f)
