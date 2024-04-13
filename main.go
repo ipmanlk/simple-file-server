@@ -210,6 +210,10 @@ func main() {
 	mux := http.NewServeMux()
 
 	// Register handlers
+	mux.HandleFunc("GET /", func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("Hello, World!"))
+	})
+
 	mux.HandleFunc("POST /upload", func(w http.ResponseWriter, r *http.Request) {
 		uploadFileHandler(w, r, db)
 	})
@@ -220,5 +224,5 @@ func main() {
 
 	// Start server
 	fmt.Println("Server listening on port 8080...")
-	http.ListenAndServe("localhost:8080", mux)
+	http.ListenAndServe(":8080", mux)
 }
