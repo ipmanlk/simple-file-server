@@ -59,6 +59,13 @@ func HandleUploadFile(w http.ResponseWriter, r *http.Request, db *sql.DB) {
 		return
 	}
 
+	// Seek to the beginning of the file
+	_, err = file.Seek(0, io.SeekStart)
+	if err != nil {
+		http.Error(w, "Error reading file", http.StatusInternalServerError)
+		return
+	}
+
 	// Check if file with same hash already exists in database
 	_, existingUUID, err := sqldb.GetFileByHash(db, hash)
 
@@ -93,6 +100,111 @@ func HandleUploadFile(w http.ResponseWriter, r *http.Request, db *sql.DB) {
 
 	// Store UUID, file name, and hash in database
 	err = sqldb.SaveFile(db, uuid, handler.Filename, hash)
+	if err != nil {
+		http.Error(w, "Error saving file info to database", http.StatusInternalServerError)
+		return
+	}
+
+	// Return UUID as response
+	w.WriteHeader(http.StatusCreated)
+	w.Write([]byte(uuid))
+}
+
+func HandleUploadFileFromURL(w http.ResponseWriter, r *http.Request, db *sql.DB) {
+	// Check if request has correct API key
+	requestApiKey := r.Header.Get("x-api-key")
+	if requestApiKey != os.Getenv("API_KEY") {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	// Parse form data
+	err := r.ParseMultipartForm(1 << 20) // Max upload size of 1MB
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	// Get URL from form data
+	fileUrl, ok := r.Form["url"]
+
+	if !ok {
+		http.Error(w, "URL parameter missing", http.StatusBadRequest)
+		return
+	}
+
+	// Fetch the file from the URL
+	resp, err := http.Get(fileUrl[0])
+	if err != nil {
+		http.Error(w, "Error fetching file", http.StatusInternalServerError)
+		return
+	}
+	defer resp.Body.Close()
+
+	// Check if response status code is 200
+	if resp.StatusCode != http.StatusOK {
+		http.Error(w, "Error fetching file", http.StatusInternalServerError)
+		return
+	}
+
+	// Get filename from request form data
+	filenames, ok := r.Form["filename"]
+	var filename string
+	if ok {
+		filename = filenames[0]
+	}
+
+	// If filename is still empty, use a default name
+	if filename == "" {
+		filename = "unknown"
+	}
+
+	// Change response body to reusable reader
+	// This is required because we need to read the response body twice
+	// TODO: find a more efficient way to do this
+	resp.Body = io.NopCloser(utils.ReusableReader(resp.Body))
+
+	// Calculate hash of the file
+	hash, err := utils.CalculateFileHash(resp.Body)
+	if err != nil {
+		http.Error(w, "Error calculating hash", http.StatusInternalServerError)
+		return
+	}
+
+	// Check if file with same hash already exists in database
+	_, existingUUID, err := sqldb.GetFileByHash(db, hash)
+
+	if err == nil {
+		// File with same hash already exists, return existing UUID
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(existingUUID))
+		return
+	} else if err != sql.ErrNoRows {
+		// Error occurred while querying database
+		http.Error(w, "Error checking existing file", http.StatusInternalServerError)
+		return
+	}
+
+	// Generate unique UUID for the file
+	uuid := utils.GenerateUUID()
+
+	// Create file with UUID as name
+	f, err := os.OpenFile(filepath.Join(uploadsDir, uuid+"_"+filename), os.O_WRONLY|os.O_CREATE, 0666)
+	if err != nil {
+		http.Error(w, "Error saving file", http.StatusInternalServerError)
+		return
+	}
+	defer f.Close()
+
+	// Copy file data to destination
+	_, err = io.Copy(f, resp.Body)
+	if err != nil {
+		http.Error(w, "Error saving file", http.StatusInternalServerError)
+		return
+	}
+
+	// Store UUID, file name, and hash in database
+	err = sqldb.SaveFile(db, uuid, filename, hash)
 	if err != nil {
 		http.Error(w, "Error saving file info to database", http.StatusInternalServerError)
 		return

@@ -38,6 +38,10 @@ func main() {
 		handlers.HandleUploadFile(w, r, db)
 	})
 
+	mux.HandleFunc("POST /upload-url", func(w http.ResponseWriter, r *http.Request) {
+		handlers.HandleUploadFileFromURL(w, r, db)
+	})
+
 	mux.HandleFunc("GET /files/{uuid}", func(w http.ResponseWriter, r *http.Request) {
 		handlers.HandleDownloadFile(w, r, db)
 	})
