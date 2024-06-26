@@ -14,6 +14,9 @@ import (
 	"github.com/google/uuid"
 )
 
+const	UPLOADS_DIR = "./uploads";
+const UPLOADS_DIRV2 = "./uploadsv2"
+
 func HandleHelloWorld(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte("Hello, World!"))
 }
@@ -83,7 +86,7 @@ func HandleUploadFile(w http.ResponseWriter, r *http.Request, db *sql.DB) {
 	year := now.Format("2006")
 	month := now.Format("01")
 	day := now.Format("02")
-	dir := filepath.Join(sqldb.UPLOADS_DIR, year, month, day)
+	dir := filepath.Join(UPLOADS_DIRV2, year, month, day)
 
 	err = os.MkdirAll(dir, os.ModePerm)
 	if err != nil {
@@ -201,7 +204,7 @@ func HandleUploadFileFromURL(w http.ResponseWriter, r *http.Request, db *sql.DB)
 	year := now.Format("2006")
 	month := now.Format("01")
 	day := now.Format("02")
-	dir := filepath.Join(sqldb.UPLOADS_DIR, year, month, day)
+	dir := filepath.Join(UPLOADS_DIRV2, year, month, day)
 
 	err = os.MkdirAll(dir, os.ModePerm)
 	if err != nil {
@@ -254,7 +257,7 @@ func HandleDownloadFile(w http.ResponseWriter, r *http.Request, db *sql.DB) {
 		// If file is not found in the new table, check the old table
 		if err == sql.ErrNoRows {
 			filename, err = sqldb.GetFileByUUID(db, ruuid)
-			filePath = filepath.Join(sqldb.UPLOADS_DIR, ruuid+"_"+filename)
+			filePath = filepath.Join(UPLOADS_DIR, ruuid+"_"+filename)
 		}
 
 		if err != nil {

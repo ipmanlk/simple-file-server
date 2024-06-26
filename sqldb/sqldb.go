@@ -4,7 +4,6 @@ import "database/sql"
 
 // Constants for directories and database
 const (
-	UPLOADS_DIR = "./uploads"
 	dbFile     = "./data/data.db"
 )
 

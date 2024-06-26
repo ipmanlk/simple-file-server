@@ -3,5 +3,7 @@ data/*
 
 uploads/*
 !uploads/.gitkeep
+uploadsv2/*
+!uploadsv2/.gitkeep
 
 .env
