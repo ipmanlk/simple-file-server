@@ -9,14 +9,9 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/google/uuid"
-)
-
-// Constants for directories and database
-const (
-	uploadsDir = "./uploads"
-	dbFile     = "./data/data.db"
 )
 
 func HandleHelloWorld(w http.ResponseWriter, r *http.Request) {
@@ -83,8 +78,22 @@ func HandleUploadFile(w http.ResponseWriter, r *http.Request, db *sql.DB) {
 	// Generate unique UUID for the file
 	uuid := utils.GenerateUUID()
 
+	// Create Year/Month/Day directory structure
+	now := time.Now()
+	year := now.Format("2006")
+	month := now.Format("01")
+	day := now.Format("02")
+	dir := filepath.Join(sqldb.UPLOADS_DIR, year, month, day)
+
+	err = os.MkdirAll(dir, os.ModePerm)
+	if err != nil {
+		http.Error(w, "Error creating directory", http.StatusInternalServerError)
+		return
+	}
+
 	// Create file with UUID as name
-	f, err := os.OpenFile(filepath.Join(uploadsDir, uuid+"_"+handler.Filename), os.O_WRONLY|os.O_CREATE, 0666)
+	filePath := filepath.Join(dir, uuid+"_"+handler.Filename)
+	f, err := os.OpenFile(filePath, os.O_WRONLY|os.O_CREATE, 0666)
 	if err != nil {
 		http.Error(w, "Error saving file", http.StatusInternalServerError)
 		return
@@ -98,8 +107,8 @@ func HandleUploadFile(w http.ResponseWriter, r *http.Request, db *sql.DB) {
 		return
 	}
 
-	// Store UUID, file name, and hash in database
-	err = sqldb.SaveFile(db, uuid, handler.Filename, hash)
+	// Store UUID, file name, hash, and directory in new table
+	err = sqldb.SaveFileV2(db, uuid, handler.Filename, hash, filePath)
 	if err != nil {
 		http.Error(w, "Error saving file info to database", http.StatusInternalServerError)
 		return
@@ -161,7 +170,6 @@ func HandleUploadFileFromURL(w http.ResponseWriter, r *http.Request, db *sql.DB)
 
 	// Change response body to reusable reader
 	// This is required because we need to read the response body twice
-	// TODO: find a more efficient way to do this
 	resp.Body = io.NopCloser(utils.ReusableReader(resp.Body))
 
 	// Calculate hash of the file
@@ -188,8 +196,22 @@ func HandleUploadFileFromURL(w http.ResponseWriter, r *http.Request, db *sql.DB)
 	// Generate unique UUID for the file
 	uuid := utils.GenerateUUID()
 
+	// Create Year/Month/Day directory structure
+	now := time.Now()
+	year := now.Format("2006")
+	month := now.Format("01")
+	day := now.Format("02")
+	dir := filepath.Join(sqldb.UPLOADS_DIR, year, month, day)
+
+	err = os.MkdirAll(dir, os.ModePerm)
+	if err != nil {
+		http.Error(w, "Error creating directory", http.StatusInternalServerError)
+		return
+	}
+
 	// Create file with UUID as name
-	f, err := os.OpenFile(filepath.Join(uploadsDir, uuid+"_"+filename), os.O_WRONLY|os.O_CREATE, 0666)
+	filePath := filepath.Join(dir, uuid+"_"+filename)
+	f, err := os.OpenFile(filePath, os.O_WRONLY|os.O_CREATE, 0666)
 	if err != nil {
 		http.Error(w, "Error saving file", http.StatusInternalServerError)
 		return
@@ -203,8 +225,8 @@ func HandleUploadFileFromURL(w http.ResponseWriter, r *http.Request, db *sql.DB)
 		return
 	}
 
-	// Store UUID, file name, and hash in database
-	err = sqldb.SaveFile(db, uuid, filename, hash)
+	// Store UUID, file name, hash, and directory in new table
+	err = sqldb.SaveFileV2(db, uuid, filename, hash, filePath)
 	if err != nil {
 		http.Error(w, "Error saving file info to database", http.StatusInternalServerError)
 		return
@@ -226,19 +248,27 @@ func HandleDownloadFile(w http.ResponseWriter, r *http.Request, db *sql.DB) {
 	}
 
 	// Query database for filename associated with UUID
-	filename, _, err := sqldb.GetFileByUUID(db, ruuid)
+	filename, filePath, err := sqldb.GetFileByUUIDV2(db, ruuid)
 
 	if err != nil {
+		// If file is not found in the new table, check the old table
 		if err == sql.ErrNoRows {
-			http.Error(w, "File not found", http.StatusNotFound)
+			filename, err = sqldb.GetFileByUUID(db, ruuid)
+			filePath = filepath.Join(sqldb.UPLOADS_DIR, ruuid+"_"+filename)
+		}
+
+		if err != nil {
+			if err == sql.ErrNoRows {
+				http.Error(w, "File not found", http.StatusNotFound)
+				return
+			}
+			http.Error(w, "Error retrieving file info from database", http.StatusInternalServerError)
 			return
 		}
-		http.Error(w, "Error retrieving file info from database", http.StatusInternalServerError)
-		return
 	}
 
 	// Open file for reading
-	f, err := os.Open(filepath.Join(uploadsDir, ruuid+"_"+filename))
+	f, err := os.Open(filePath)
 	if err != nil {
 		http.Error(w, "Error retrieving file", http.StatusInternalServerError)
 		return
