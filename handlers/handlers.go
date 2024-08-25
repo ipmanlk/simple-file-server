@@ -6,6 +6,7 @@ import (
 	"io"
 	"ipmanlk/simplefileserver/sqldb"
 	"ipmanlk/simplefileserver/utils"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -14,7 +15,7 @@ import (
 	"github.com/google/uuid"
 )
 
-const	UPLOADS_DIR = "./uploads";
+const UPLOADS_DIR = "./uploads"
 const UPLOADS_DIRV2 = "./uploadsv2"
 
 func HandleHelloWorld(w http.ResponseWriter, r *http.Request) {
@@ -39,6 +40,7 @@ func HandleUploadFile(w http.ResponseWriter, r *http.Request, db *sql.DB) {
 	// Get the file from the request
 	file, handler, err := r.FormFile("file")
 	if err != nil {
+		log.Printf("Error retrieving file: %v", err)
 		http.Error(w, "Error retrieving file", http.StatusBadRequest)
 		return
 	}
@@ -53,6 +55,7 @@ func HandleUploadFile(w http.ResponseWriter, r *http.Request, db *sql.DB) {
 	// Calculate hash of the file
 	hash, err := utils.CalculateFileHash(file)
 	if err != nil {
+		log.Printf("Error calculating hash: %v", err)
 		http.Error(w, "Error calculating hash", http.StatusInternalServerError)
 		return
 	}
@@ -60,6 +63,7 @@ func HandleUploadFile(w http.ResponseWriter, r *http.Request, db *sql.DB) {
 	// Seek to the beginning of the file
 	_, err = file.Seek(0, io.SeekStart)
 	if err != nil {
+		log.Printf("Error seeking file: %v", err)
 		http.Error(w, "Error reading file", http.StatusInternalServerError)
 		return
 	}
@@ -74,6 +78,7 @@ func HandleUploadFile(w http.ResponseWriter, r *http.Request, db *sql.DB) {
 		return
 	} else if err != sql.ErrNoRows {
 		// Error occurred while querying database
+		log.Printf("Error checking existing file: %v", err)
 		http.Error(w, "Error checking existing file", http.StatusInternalServerError)
 		return
 	}
@@ -90,6 +95,7 @@ func HandleUploadFile(w http.ResponseWriter, r *http.Request, db *sql.DB) {
 
 	err = os.MkdirAll(dir, os.ModePerm)
 	if err != nil {
+		log.Printf("Error creating directory: %v", err)
 		http.Error(w, "Error creating directory", http.StatusInternalServerError)
 		return
 	}
@@ -98,7 +104,8 @@ func HandleUploadFile(w http.ResponseWriter, r *http.Request, db *sql.DB) {
 	filePath := filepath.Join(dir, uuid+"_"+handler.Filename)
 	f, err := os.OpenFile(filePath, os.O_WRONLY|os.O_CREATE, 0666)
 	if err != nil {
-		http.Error(w, "Error saving file", http.StatusInternalServerError)
+		log.Printf("Error creating file: %v", err)
+		http.Error(w, "Error creating file", http.StatusInternalServerError)
 		return
 	}
 	defer f.Close()
@@ -106,6 +113,7 @@ func HandleUploadFile(w http.ResponseWriter, r *http.Request, db *sql.DB) {
 	// Copy file data to destination
 	_, err = io.Copy(f, file)
 	if err != nil {
+		log.Printf("Error saving file: %v", err)
 		http.Error(w, "Error saving file", http.StatusInternalServerError)
 		return
 	}
@@ -113,6 +121,7 @@ func HandleUploadFile(w http.ResponseWriter, r *http.Request, db *sql.DB) {
 	// Store UUID, file name, hash, and directory in new table
 	err = sqldb.SaveFileV2(db, uuid, handler.Filename, hash, filePath)
 	if err != nil {
+		log.Printf("Error saving file info to database: %v", err)
 		http.Error(w, "Error saving file info to database", http.StatusInternalServerError)
 		return
 	}
@@ -148,6 +157,7 @@ func HandleUploadFileFromURL(w http.ResponseWriter, r *http.Request, db *sql.DB)
 	// Fetch the file from the URL
 	resp, err := http.Get(fileUrl[0])
 	if err != nil {
+		log.Printf("Error fetching file: %v", err)
 		http.Error(w, "Error fetching file", http.StatusInternalServerError)
 		return
 	}
@@ -155,6 +165,7 @@ func HandleUploadFileFromURL(w http.ResponseWriter, r *http.Request, db *sql.DB)
 
 	// Check if response status code is 200
 	if resp.StatusCode != http.StatusOK {
+		log.Printf("Error fetching file: %v", resp.Status)
 		http.Error(w, "Error fetching file", http.StatusInternalServerError)
 		return
 	}
@@ -178,6 +189,7 @@ func HandleUploadFileFromURL(w http.ResponseWriter, r *http.Request, db *sql.DB)
 	// Calculate hash of the file
 	hash, err := utils.CalculateFileHash(resp.Body)
 	if err != nil {
+		log.Printf("Error calculating hash: %v", err)
 		http.Error(w, "Error calculating hash", http.StatusInternalServerError)
 		return
 	}
@@ -192,6 +204,7 @@ func HandleUploadFileFromURL(w http.ResponseWriter, r *http.Request, db *sql.DB)
 		return
 	} else if err != sql.ErrNoRows {
 		// Error occurred while querying database
+		log.Printf("Error checking existing file: %v", err)
 		http.Error(w, "Error checking existing file", http.StatusInternalServerError)
 		return
 	}
@@ -208,6 +221,7 @@ func HandleUploadFileFromURL(w http.ResponseWriter, r *http.Request, db *sql.DB)
 
 	err = os.MkdirAll(dir, os.ModePerm)
 	if err != nil {
+		log.Printf("Error creating directory: %v", err)
 		http.Error(w, "Error creating directory", http.StatusInternalServerError)
 		return
 	}
@@ -216,7 +230,8 @@ func HandleUploadFileFromURL(w http.ResponseWriter, r *http.Request, db *sql.DB)
 	filePath := filepath.Join(dir, uuid+"_"+filename)
 	f, err := os.OpenFile(filePath, os.O_WRONLY|os.O_CREATE, 0666)
 	if err != nil {
-		http.Error(w, "Error saving file", http.StatusInternalServerError)
+		log.Printf("Error creating file: %v", err)
+		http.Error(w, "Error creating file", http.StatusInternalServerError)
 		return
 	}
 	defer f.Close()
@@ -231,6 +246,7 @@ func HandleUploadFileFromURL(w http.ResponseWriter, r *http.Request, db *sql.DB)
 	// Store UUID, file name, hash, and directory in new table
 	err = sqldb.SaveFileV2(db, uuid, filename, hash, filePath)
 	if err != nil {
+		log.Printf("Error saving file info to database: %v", err)
 		http.Error(w, "Error saving file info to database", http.StatusInternalServerError)
 		return
 	}
@@ -265,6 +281,7 @@ func HandleDownloadFile(w http.ResponseWriter, r *http.Request, db *sql.DB) {
 				http.Error(w, "File not found", http.StatusNotFound)
 				return
 			}
+			log.Printf("Error retrieving file info from database: %v", err)
 			http.Error(w, "Error retrieving file info from database", http.StatusInternalServerError)
 			return
 		}
@@ -273,7 +290,8 @@ func HandleDownloadFile(w http.ResponseWriter, r *http.Request, db *sql.DB) {
 	// Open file for reading
 	f, err := os.Open(filePath)
 	if err != nil {
-		http.Error(w, "Error retrieving file", http.StatusInternalServerError)
+		log.Printf("Error opening file: %v", err)
+		http.Error(w, "Error opeing file", http.StatusInternalServerError)
 		return
 	}
 	defer f.Close()
@@ -286,7 +304,8 @@ func HandleDownloadFile(w http.ResponseWriter, r *http.Request, db *sql.DB) {
 	// Stream file content to response
 	_, err = io.Copy(w, f)
 	if err != nil {
-		http.Error(w, "Error retrieving file", http.StatusInternalServerError)
+		log.Printf("Error streaming file: %v", err)
+		http.Error(w, "Error streaming file", http.StatusInternalServerError)
 		return
 	}
 }
