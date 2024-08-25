@@ -69,7 +69,7 @@ func HandleUploadFile(w http.ResponseWriter, r *http.Request, db *sql.DB) {
 	}
 
 	// Check if file with same hash already exists in database
-	_, existingUUID, err := sqldb.GetFileByHash(db, hash)
+	_, existingUUID, _, err := sqldb.GetFileByHashV2(db, hash)
 
 	if err == nil {
 		// File with same hash already exists, return existing UUID
@@ -195,7 +195,7 @@ func HandleUploadFileFromURL(w http.ResponseWriter, r *http.Request, db *sql.DB)
 	}
 
 	// Check if file with same hash already exists in database
-	_, existingUUID, err := sqldb.GetFileByHash(db, hash)
+	_, existingUUID, _, err := sqldb.GetFileByHashV2(db, hash)
 
 	if err == nil {
 		// File with same hash already exists, return existing UUID
